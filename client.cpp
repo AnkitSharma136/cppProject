@@ -5,8 +5,8 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
-constexpr int BUFFER_SIZE = 1024;
-constexpr int PORT = 8080;
+const int BUFFER_SIZE = 1024;
+const int PORT = 5555;
 
 int main() {
     int clientSocket;
