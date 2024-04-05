@@ -47,6 +47,9 @@ int main() {
         std::string message;
         std::getline(std::cin, message);
 
+        // Terminate Client
+        if(message == "#exit") break;
+        
         // Construct message with name
         std::string fullMessage = name + ": " + message;
 
