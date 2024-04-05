@@ -4,14 +4,19 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <thread>
 
 const int BUFFER_SIZE = 1024;
-const int PORT = 5555;
+const int PORT = 8888;
+
+// Function to handle receiving messages from the server
+void receiveMessages(int clientSocket, char* buffer,bool &exitFlag);
 
 int main() {
     int clientSocket;
     struct sockaddr_in serverAddr;
     char buffer[BUFFER_SIZE];
+    bool exitFlag = false;
     std::string name;
 
     // Create socket
@@ -42,14 +47,21 @@ int main() {
 
     std::cout << "Start typing your messages...\n";
 
+    //Seperate Thread for receiving Message
+    std::thread receiveThread(receiveMessages, clientSocket, buffer, std::ref(exitFlag));
+
     while (true) {
-        std::cout << name << " > ";
+        std::cout << " > ";
         std::string message;
         std::getline(std::cin, message);
 
         // Terminate Client
-        if(message == "#exit") break;
-        
+        if(message == "#exit"){
+            send(clientSocket, message.c_str(), message.length(), 0);
+            exitFlag = true;
+            break;
+        };
+
         // Construct message with name
         std::string fullMessage = name + ": " + message;
 
@@ -57,6 +69,28 @@ int main() {
         send(clientSocket, fullMessage.c_str(), fullMessage.length(), 0);
 
         // Receive response from server
+        // int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
+        // if (bytesReceived <= 0) {
+        //     std::cerr << "Server disconnected\n";
+        //     break;
+        // }
+
+        // buffer[bytesReceived] = '\0';
+        // std::cout << buffer << std::endl; 
+    }
+    receiveThread.join();
+
+    close(clientSocket);
+    return EXIT_SUCCESS;
+}
+
+void receiveMessages(int clientSocket, char* buffer,bool &exitFlag) {
+    while (true) {
+
+        if(exitFlag){
+            std::cout<<"Exit Signal recieved"<<std::endl;
+            break;
+        }
         int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
         if (bytesReceived <= 0) {
             std::cerr << "Server disconnected\n";
@@ -66,7 +100,4 @@ int main() {
         buffer[bytesReceived] = '\0';
         std::cout << buffer << std::endl;
     }
-
-    close(clientSocket);
-    return EXIT_SUCCESS;
 }

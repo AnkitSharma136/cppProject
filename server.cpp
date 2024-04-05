@@ -9,7 +9,7 @@
 
 const int BUFFER_SIZE = 1024;
 const int MAX_CLIENTS = 10;
-const int PORT = 5555;
+const int PORT = 8888;
 
 std::vector<int> clientSockets(MAX_CLIENTS, 0);
 
