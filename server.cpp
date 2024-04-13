@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <thread>
 #include <vector>
+#include <unordered_map>
 
 const int BUFFER_SIZE = 1024;
 const int MAX_CLIENTS = 10;
@@ -34,6 +35,20 @@ void handleClient(int clientSocket, int clientIndex) {
             }
         }
     }
+}
+
+std::unordered_map<std::string, std::string> userCredentials = {
+    {"user1", "password1"},
+    {"user2", "password2"}
+};
+
+// Function to authenticate users
+bool authenticateUser(const std::string& username, const std::string& password) {
+    auto it = userCredentials.find(username);
+    if (it != userCredentials.end() && it->second == password) {
+        return true;  // Authentication successful
+    }
+    return false;     // Authentication failed
 }
 
 int main() {
@@ -79,8 +94,32 @@ int main() {
 
         std::cout << "New connection established. Client IP: " << inet_ntoa(clientAddr.sin_addr)
                   << ", Port: " << ntohs(clientAddr.sin_port) << std::endl;
+        
+    
 
-        // Add client socket to the vector
+        // Authenticate the client
+        char credentials[BUFFER_SIZE];
+        recv(clientSocket, credentials, BUFFER_SIZE, 0);
+
+        std::string credentialsStr(credentials);
+        size_t delimiterPos = credentialsStr.find(':');
+        std::string username = credentialsStr.substr(0, delimiterPos);
+        std::string password = credentialsStr.substr(delimiterPos + 1);
+
+        if (!authenticateUser(username, password)) {
+            std::cerr << "Authentication failed for " << username << std::endl;
+            close(clientSocket);
+            continue;
+        }
+
+
+        std::cout << "User " << username << " authenticated successfully.\n";
+        // Authentication successful, send authentication result to the client
+        send(clientSocket, "authenticated", strlen("authenticated"), 0);
+
+
+
+        // Add client socket to the vectorc
         for (int i = 0; i < MAX_CLIENTS; ++i) {
             if (clientSockets[i] == 0) {
                 clientSockets[i] = clientSocket;

@@ -42,13 +42,45 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    std::cout << "Connected to server. Enter your name: ";
-    std::getline(std::cin, name);
+    // std::cout << "Connected to server. Enter your name: ";
+    // std::getline(std::cin, name);
 
-    std::cout << "Start typing your messages...\n";
+    //Authentication
+    // Get username and password from user
+    std::string username, password;
+    std::cout << "Enter your username: ";
+    std::getline(std::cin, username);
+    std::cout << "Enter your password: ";
+    std::getline(std::cin, password);
+
+
+    // Send username and password to server for authentication as a single string
+    std::string credentials = username + ":" + password;
+    send(clientSocket, credentials.c_str(), credentials.length(), 0);
+
 
     //Seperate Thread for receiving Message
     std::thread receiveThread(receiveMessages, clientSocket, buffer, std::ref(exitFlag));
+
+    // std::cout << "Start typing your messages...\n";
+
+    // Wait for authentication response from server
+    char authResponse[BUFFER_SIZE];
+    int bytesReceived=recv(clientSocket, authResponse, BUFFER_SIZE, 0);
+    if (bytesReceived <= 0) {
+        std::cerr << "Error: Failed to receive authentication response from server\n";
+        close(clientSocket);
+        return EXIT_FAILURE;
+    }
+    authResponse[bytesReceived] = '\0';
+    std::string authResult(authResponse);
+    // std::cout<<"authResult"<<authResult<<std::endl;
+    if (authResult == "authenticated") {
+        std::cout << "Start typing your messages...\n";
+    } else {
+        std::cerr << "Authentication failed. Exiting...\n";
+        return EXIT_FAILURE;
+    }
 
     while (true) {
         std::cout << " > ";
