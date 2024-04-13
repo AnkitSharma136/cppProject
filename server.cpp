@@ -1,138 +1,174 @@
-#include <iostream>
-#include <cstring>
-#include <cstdlib>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <thread>
-#include <vector>
-#include <unordered_map>
+#include<iostream>
+#include<sys/socket.h>
+#include<unistd.h>
+#include<cstdlib>
+#include<cstring>
+#include<arpa/inet.h>
+#include<vector>
+#include<thread>
+#include<map>
+#include<algorithm>
 
-const int BUFFER_SIZE = 1024;
+const int PORT = 9000;
 const int MAX_CLIENTS = 10;
-const int PORT = 8888;
+const int BUFFER_SIZE = 1024;
 
-std::vector<int> clientSockets(MAX_CLIENTS, 0);
-
-void handleClient(int clientSocket, int clientIndex) {
-    char buffer[BUFFER_SIZE];
-    while (true) {
-        int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
-        if (bytesReceived <= 0) {
-            std::cout << "Client " << clientIndex << " disconnected.\n";
-            close(clientSocket);
-            clientSockets[clientIndex] = 0;
-            break;
-        }
-
-        buffer[bytesReceived] = '\0';
-        std::cout << "Client " << clientIndex << " says: " << buffer << std::endl;
-
-        // Broadcast the message to all clients except the sender
-        for (int i = 0; i < MAX_CLIENTS; ++i) {
-            if (clientSockets[i] != 0 && i != clientIndex) {
-                send(clientSockets[i], buffer, bytesReceived, 0);
-            }
-        }
-    }
-}
-
-std::unordered_map<std::string, std::string> userCredentials = {
-    {"user1", "password1"},
-    {"user2", "password2"}
+struct room{
+    std::vector<int> client;
+    std::string roomPassword;
 };
 
-// Function to authenticate users
-bool authenticateUser(const std::string& username, const std::string& password) {
-    auto it = userCredentials.find(username);
-    if (it != userCredentials.end() && it->second == password) {
+std::map<std::string,room> rooms;
+std::map<std::string, std::string> userCredentials;
+
+bool authenticateUser(const std::string& userName, const std::string& userassword) {
+    if(userCredentials.find(userName)==userCredentials.end()){
+        userCredentials[userName]=userassword;
+        return true;
+    }
+    auto it = userCredentials.find(userName);
+    if (it->second == userassword) {
         return true;  // Authentication successful
     }
     return false;     // Authentication failed
 }
 
-int main() {
-    int serverSocket, clientSocket;
-    struct sockaddr_in serverAddr, clientAddr;
-    socklen_t clientAddrLen = sizeof(clientAddr);
+void handleClient(int clientFd,std::string roomName, std::string password, std::string clientName);
 
-    // Create socket
-    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverSocket == -1) {
-        std::cerr << "Error: Could not create socket\n";
+int main(){
+    int serverFd;
+    int clientFd;
+
+    struct sockaddr_in serverAddress , clientAddress;
+    socklen_t clientAddressLength = sizeof(clientAddress);
+
+    //Socket Creation
+    serverFd = socket(AF_INET,SOCK_STREAM,0);
+
+    if(serverFd == -1) {
+        std::cerr<<"Failed to create Socket";
         return EXIT_FAILURE;
     }
 
-    // Prepare the sockaddr_in structure
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(PORT);
+    //Socket Preparation
+    serverAddress.sin_family =AF_INET;
+    serverAddress.sin_addr.s_addr = INADDR_ANY;
+    serverAddress.sin_port=htons(PORT);
 
-    // Bind
-    if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
-        std::cerr << "Error: Bind failed\n";
+    //Socket Binding
+    if(bind(serverFd , (struct sockaddr*)&serverAddress,sizeof(serverAddress))== -1){
+        std::cerr<<"Failed to bind Socket";
         return EXIT_FAILURE;
     }
 
-    // Listen
-    if (listen(serverSocket, MAX_CLIENTS) == -1) {
-        std::cerr << "Error: Listen failed\n";
+    //Socket Listening
+    if(listen(serverFd,MAX_CLIENTS)==-1){
+        std::cerr<<"Failed to listen";
         return EXIT_FAILURE;
     }
+    else
+        std::cout<< "Listening on Port : " << PORT <<" Waiting for connections..." <<std::endl;
 
-    std::cout << "Server started. Waiting for connections...\n";
+    while(true){
+        clientFd = accept(serverFd,(struct sockaddr*) &clientAddress, &clientAddressLength);
 
-    int clientIndex = 0;
-
-    while (true) {
-        // Accept connection from an incoming client
-        clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &clientAddrLen);
-        if (clientSocket == -1) {
-            std::cerr << "Error: Accept failed\n";
-            continue;
+        if(clientFd == -1){
+            std::cerr<<"Client Accept Failed";
+            return EXIT_FAILURE;
         }
 
-        std::cout << "New connection established. Client IP: " << inet_ntoa(clientAddr.sin_addr)
-                  << ", Port: " << ntohs(clientAddr.sin_port) << std::endl;
-        
-    
+        std::cout<<"New Connection Established at IP and PORT :"<< inet_ntoa(clientAddress.sin_addr) <<"  " <<ntohs(clientAddress.sin_port)<<std::endl;
 
         // Authenticate the client
         char credentials[BUFFER_SIZE];
-        recv(clientSocket, credentials, BUFFER_SIZE, 0);
+        recv(clientFd, credentials, BUFFER_SIZE, 0);
 
         std::string credentialsStr(credentials);
         size_t delimiterPos = credentialsStr.find(':');
-        std::string username = credentialsStr.substr(0, delimiterPos);
-        std::string password = credentialsStr.substr(delimiterPos + 1);
+        std::string userName = credentialsStr.substr(0, delimiterPos);
+        std::string UserPassword = credentialsStr.substr(delimiterPos + 1);
 
-        if (!authenticateUser(username, password)) {
-            std::cerr << "Authentication failed for " << username << std::endl;
-            close(clientSocket);
+        if (!authenticateUser(userName, UserPassword)) {
+            std::cerr << "Authentication failed for " << userName << std::endl;
+            close(clientFd);
             continue;
         }
 
 
-        std::cout << "User " << username << " authenticated successfully.\n";
+        std::cout << "User " << userName << " authenticated successfully.\n";
         // Authentication successful, send authentication result to the client
-        send(clientSocket, "authenticated", strlen("authenticated"), 0);
+        send(clientFd, "authenticated", strlen("authenticated"), 0);
 
+        char dataBuffer[BUFFER_SIZE];
+        int bytesReceived = recv(clientFd,dataBuffer,BUFFER_SIZE,0);
+        if (bytesReceived <= 0) {
+            std::cerr << "Error: Failed to receive data from client\n";
+            close(clientFd);
+            continue;
+        }
+        dataBuffer[bytesReceived] = '\0';
+        
+        std::string data(dataBuffer);
+        size_t position1 = data.find(',');
+        size_t position2 =data.find(',',position1 + 1);
 
-
-        // Add client socket to the vectorc
-        for (int i = 0; i < MAX_CLIENTS; ++i) {
-            if (clientSockets[i] == 0) {
-                clientSockets[i] = clientSocket;
-                clientIndex = i;
-                break;
-            }
+        if (position1 == std::string::npos || position2 == std::string::npos) {
+            std::cerr << "Error: Invalid data format from client\n";
+            close(clientFd);
+            continue;
         }
 
-        // Create thread to handle client
-        std::thread clientThread(handleClient, clientSocket, clientIndex);
-        clientThread.detach(); // Detach the thread to allow it to run independently
+        std::string roomName = data.substr(0, position1);
+        std::string password = data.substr(position1 + 1, position2 - position1 - 1);
+        std::string clientName = data.substr(position2 + 1);
+
+        if(rooms.find(roomName)==rooms.end()){
+            room newRoom;
+            newRoom.roomPassword = password;
+            rooms[roomName] = newRoom;
+        }
+
+        std::thread clientThread(handleClient, clientFd, roomName, password, clientName);
+        clientThread.detach();
     }
 
-    close(serverSocket);
+    close(serverFd);
     return EXIT_SUCCESS;
+
 }
+
+void handleClient(int clientFd, std::string roomName, std::string password, std::string clientName) {
+    room &currentRoom = rooms[roomName];
+
+    if (!password.empty() && currentRoom.roomPassword != password) {
+        std::cerr << "Invalid password for room = " << roomName << std::endl;
+        close(clientFd);
+        return;
+    }
+
+    currentRoom.client.push_back(clientFd);
+
+    while (true) {
+        char buffer[BUFFER_SIZE];
+        int bytesReceived = recv(clientFd, buffer, BUFFER_SIZE, 0);
+
+        if (bytesReceived <= 0) {
+            std::cout << "Client " << clientName << " disconnected from room " << roomName << std::endl;
+            close(clientFd);
+            currentRoom.client.erase(std::remove(currentRoom.client.begin(), currentRoom.client.end(), clientFd), currentRoom.client.end());
+            return;
+        }
+
+        buffer[bytesReceived] = '\0';
+        std::cout << "Client: " << clientName << " in room = " << roomName << " says: " << buffer << std::endl;
+        
+        std::string message = clientName + ": " + std::string(buffer, bytesReceived); 
+        
+        for (int otherClient : currentRoom.client) {
+            if (otherClient != clientFd) {
+                send(otherClient, message.c_str(), message.size(), 0);
+            }
+        }
+    }
+}
+

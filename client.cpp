@@ -1,49 +1,36 @@
-#include <iostream>
-#include <cstdlib>
-#include <cstring>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <thread>
+#include<sys/socket.h>
+#include<iostream>
+#include<arpa/inet.h>
+#include<cstdlib>
+#include<cstring>
+#include<thread>
+#include<unistd.h>
 
+const int PORT = 9000;
 const int BUFFER_SIZE = 1024;
-const int PORT = 8888;
 
-// Function to handle receiving messages from the server
-void receiveMessages(int clientSocket, char* buffer,bool &exitFlag);
+void receiveMessages(int clientFd);
 
-int main() {
-    int clientSocket;
-    struct sockaddr_in serverAddr;
+int main(){
+    int clientFd;
+    struct sockaddr_in serverAddress;
+
+    clientFd = socket(AF_INET,SOCK_STREAM,0);
+    if(clientFd == -1){
+        std::cerr<<"Failed to create Client Socket";
+        return EXIT_FAILURE;
+    }
+
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_addr.s_addr = inet_addr("127.0.0.1");
+    serverAddress.sin_port=htons(PORT);
+
+    if(connect(clientFd,(struct sockaddr *)&serverAddress,sizeof(serverAddress))==-1){
+        std::cerr<<"Failed to connect to server";
+        return EXIT_FAILURE;
+    }
+
     char buffer[BUFFER_SIZE];
-    bool exitFlag = false;
-    std::string name;
-
-    // Create socket
-    clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (clientSocket == -1) {
-        std::cerr << "Error: Could not create socket\n";
-        return EXIT_FAILURE;
-    }
-
-    // Prepare the sockaddr_in structure
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(PORT);
-
-    // Convert IPv4 and IPv6 addresses from text to binary form
-    if (inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr) <= 0) {
-        std::cerr << "Invalid address/ Address not supported\n";
-        return EXIT_FAILURE;
-    }
-
-    // Connect to server
-    if (connect(clientSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
-        std::cerr << "Error: Connection failed\n";
-        return EXIT_FAILURE;
-    }
-
-    // std::cout << "Connected to server. Enter your name: ";
-    // std::getline(std::cin, name);
 
     //Authentication
     // Get username and password from user
@@ -53,83 +40,63 @@ int main() {
     std::cout << "Enter your password: ";
     std::getline(std::cin, password);
 
-
     // Send username and password to server for authentication as a single string
     std::string credentials = username + ":" + password;
-    send(clientSocket, credentials.c_str(), credentials.length(), 0);
-
-
-    //Seperate Thread for receiving Message
-    std::thread receiveThread(receiveMessages, clientSocket, buffer, std::ref(exitFlag));
-
-    // std::cout << "Start typing your messages...\n";
+    send(clientFd, credentials.c_str(), credentials.length(), 0);
 
     // Wait for authentication response from server
     char authResponse[BUFFER_SIZE];
-    int bytesReceived=recv(clientSocket, authResponse, BUFFER_SIZE, 0);
+    int bytesReceived=recv(clientFd, authResponse, BUFFER_SIZE, 0);
     if (bytesReceived <= 0) {
         std::cerr << "Error: Failed to receive authentication response from server\n";
-        close(clientSocket);
+        close(clientFd);
         return EXIT_FAILURE;
     }
     authResponse[bytesReceived] = '\0';
     std::string authResult(authResponse);
     // std::cout<<"authResult"<<authResult<<std::endl;
     if (authResult == "authenticated") {
-        std::cout << "Start typing your messages...\n";
+        //std::cout << "Start typing your messages...\n";
     } else {
         std::cerr << "Authentication failed. Exiting...\n";
         return EXIT_FAILURE;
     }
 
-    while (true) {
-        std::cout << " > ";
+    std::cout<<"Enter the (roomName,Password,ClientName) comma seperated"<<std::endl;
+    std::cin.getline(buffer,BUFFER_SIZE);
+
+    send(clientFd,buffer,strlen(buffer),0);
+
+    std::thread receiveThread(receiveMessages,clientFd);
+    std::cout<<"===========Start Typing Your Message==========="<<std::endl;
+
+    while(true){
+        std::cout<<"=>> ";
         std::string message;
-        std::getline(std::cin, message);
+        std::getline(std::cin,message);
 
-        // Terminate Client
-        if(message == "#exit"){
-            send(clientSocket, message.c_str(), message.length(), 0);
-            exitFlag = true;
+        int bytesSent = send(clientFd , message.c_str() , message.length(),0);
+        if(bytesSent == -1){
+            std::cerr<<"Server Disconnected , Message not Sent";
             break;
-        };
-
-        // Construct message with name
-        std::string fullMessage = name + ": " + message;
-
-        // Send message to server
-        send(clientSocket, fullMessage.c_str(), fullMessage.length(), 0);
-
-        // Receive response from server
-        // int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
-        // if (bytesReceived <= 0) {
-        //     std::cerr << "Server disconnected\n";
-        //     break;
-        // }
-
-        // buffer[bytesReceived] = '\0';
-        // std::cout << buffer << std::endl; 
+        }
     }
-    receiveThread.join();
 
-    close(clientSocket);
+    receiveThread.join();
+    close(clientFd);
     return EXIT_SUCCESS;
 }
+void receiveMessages(int clientFd){
+    while(true){
+        char buffer[BUFFER_SIZE];
 
-void receiveMessages(int clientSocket, char* buffer,bool &exitFlag) {
-    while (true) {
-
-        if(exitFlag){
-            std::cout<<"Exit Signal recieved"<<std::endl;
-            break;
+        int bytesReceived = recv(clientFd,buffer,BUFFER_SIZE,0);
+        if(bytesReceived <= 0){
+            std::cerr<<"Server Disconnected";
+            break;;
         }
-        int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
-        if (bytesReceived <= 0) {
-            std::cerr << "Server disconnected\n";
-            break;
-        }
-
-        buffer[bytesReceived] = '\0';
-        std::cout << buffer << std::endl;
+        buffer[BUFFER_SIZE] = '\0';
+        std::cout<<buffer<<std::endl;
+        //std::cout<<"=>>> ";
     }
 }
