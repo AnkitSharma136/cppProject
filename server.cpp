@@ -7,38 +7,63 @@
 #include<vector>
 #include<thread>
 #include<map>
+#include<fstream>
 #include<algorithm>
+
+using namespace std;
 
 const int PORT = 9000;
 const int MAX_CLIENTS = 10;
 const int BUFFER_SIZE = 1024;
 
 struct room{
-    std::vector<int> client;
-    std::string roomPassword;
+    vector<int> client;
+    string roomPassword;
 };
 
-std::map<std::string,room> rooms;
-std::map<std::string, std::string> userCredentials;
+map<string,room> rooms;
+map<string, string> userCredentials;
 
-bool authenticateUser(const std::string& userName, const std::string& userassword) {
+void fillMap(){
+    string userName,userPassword;
+
+    ifstream input("user.txt");
+
+    while(input>>userName>>userPassword){
+        userCredentials[userName]=userPassword;
+    }
+    input.close();
+
+    for(const auto &it : userCredentials){
+        cout<<it.first<<" "<<it.second<<endl;
+    }
+}
+
+bool authenticateUser(const string& userName, const string& userPassword){
     if(userCredentials.find(userName)==userCredentials.end()){
-        userCredentials[userName]=userassword;
+        userCredentials[userName]=userPassword;
+
+        ofstream output("user.txt",ios::app);
+        output<<endl<<userName<<' '<<userPassword;
+        output.close();
         return true;
     }
     auto it = userCredentials.find(userName);
-    if (it->second == userassword) {
+    if (it->second == userPassword) {
         return true;  // Authentication successful
     }
     return false;     // Authentication failed
 }
 
-void handleClient(int clientFd,std::string roomName, std::string password, std::string clientName);
+void handleClient(int clientFd,string roomName, string password, string clientName);
 
 int main(){
     int serverFd;
     int clientFd;
-
+    
+    userCredentials["User8"]="1234";
+    fillMap();
+    
     struct sockaddr_in serverAddress , clientAddress;
     socklen_t clientAddressLength = sizeof(clientAddress);
 
@@ -46,7 +71,7 @@ int main(){
     serverFd = socket(AF_INET,SOCK_STREAM,0);
 
     if(serverFd == -1) {
-        std::cerr<<"Failed to create Socket";
+        cerr<<"Failed to create Socket";
         return EXIT_FAILURE;
     }
 
@@ -57,70 +82,70 @@ int main(){
 
     //Socket Binding
     if(bind(serverFd , (struct sockaddr*)&serverAddress,sizeof(serverAddress))== -1){
-        std::cerr<<"Failed to bind Socket";
+        cerr<<"Failed to bind Socket";
         return EXIT_FAILURE;
     }
 
     //Socket Listening
     if(listen(serverFd,MAX_CLIENTS)==-1){
-        std::cerr<<"Failed to listen";
+        cerr<<"Failed to listen";
         return EXIT_FAILURE;
     }
     else
-        std::cout<< "Listening on Port : " << PORT <<" Waiting for connections..." <<std::endl;
+        cout<< "Listening on Port : " << PORT <<" Waiting for connections..." <<endl;
 
     while(true){
         clientFd = accept(serverFd,(struct sockaddr*) &clientAddress, &clientAddressLength);
 
         if(clientFd == -1){
-            std::cerr<<"Client Accept Failed";
+            cerr<<"Client Accept Failed";
             return EXIT_FAILURE;
         }
 
-        std::cout<<"New Connection Established at IP and PORT :"<< inet_ntoa(clientAddress.sin_addr) <<"  " <<ntohs(clientAddress.sin_port)<<std::endl;
+        cout<<"New Connection Established at IP and PORT :"<< inet_ntoa(clientAddress.sin_addr) <<"  " <<ntohs(clientAddress.sin_port)<<endl;
 
         // Authenticate the client
         char credentials[BUFFER_SIZE];
         recv(clientFd, credentials, BUFFER_SIZE, 0);
 
-        std::string credentialsStr(credentials);
+        string credentialsStr(credentials);
         size_t delimiterPos = credentialsStr.find(':');
-        std::string userName = credentialsStr.substr(0, delimiterPos);
-        std::string UserPassword = credentialsStr.substr(delimiterPos + 1);
+        string userName = credentialsStr.substr(0, delimiterPos);
+        string UserPassword = credentialsStr.substr(delimiterPos + 1);
 
         if (!authenticateUser(userName, UserPassword)) {
-            std::cerr << "Authentication failed for " << userName << std::endl;
+            cerr << "Authentication failed for " << userName << endl;
             close(clientFd);
             continue;
         }
 
 
-        std::cout << "User " << userName << " authenticated successfully.\n";
+        cout << "User " << userName << " authenticated successfully.\n";
         // Authentication successful, send authentication result to the client
         send(clientFd, "authenticated", strlen("authenticated"), 0);
 
         char dataBuffer[BUFFER_SIZE];
         int bytesReceived = recv(clientFd,dataBuffer,BUFFER_SIZE,0);
         if (bytesReceived <= 0) {
-            std::cerr << "Error: Failed to receive data from client\n";
+            cerr << "Error: Failed to receive data from client\n";
             close(clientFd);
             continue;
         }
         dataBuffer[bytesReceived] = '\0';
         
-        std::string data(dataBuffer);
+        string data(dataBuffer);
         size_t position1 = data.find(',');
         size_t position2 =data.find(',',position1 + 1);
 
-        if (position1 == std::string::npos || position2 == std::string::npos) {
-            std::cerr << "Error: Invalid data format from client\n";
+        if (position1 == string::npos || position2 == string::npos) {
+            cerr << "Error: Invalid data format from client\n";
             close(clientFd);
             continue;
         }
 
-        std::string roomName = data.substr(0, position1);
-        std::string password = data.substr(position1 + 1, position2 - position1 - 1);
-        std::string clientName = data.substr(position2 + 1);
+        string roomName = data.substr(0, position1);
+        string password = data.substr(position1 + 1, position2 - position1 - 1);
+        string clientName = data.substr(position2 + 1);
 
         if(rooms.find(roomName)==rooms.end()){
             room newRoom;
@@ -128,7 +153,7 @@ int main(){
             rooms[roomName] = newRoom;
         }
 
-        std::thread clientThread(handleClient, clientFd, roomName, password, clientName);
+        thread clientThread(handleClient, clientFd, roomName, password, clientName);
         clientThread.detach();
     }
 
@@ -137,11 +162,11 @@ int main(){
 
 }
 
-void handleClient(int clientFd, std::string roomName, std::string password, std::string clientName) {
+void handleClient(int clientFd, string roomName, string password, string clientName) {
     room &currentRoom = rooms[roomName];
 
     if (!password.empty() && currentRoom.roomPassword != password) {
-        std::cerr << "Invalid password for room = " << roomName << std::endl;
+        cerr << "Invalid password for room = " << roomName << endl;
         close(clientFd);
         return;
     }
@@ -153,16 +178,16 @@ void handleClient(int clientFd, std::string roomName, std::string password, std:
         int bytesReceived = recv(clientFd, buffer, BUFFER_SIZE, 0);
 
         if (bytesReceived <= 0) {
-            std::cout << "Client " << clientName << " disconnected from room " << roomName << std::endl;
+            cout << "Client " << clientName << " disconnected from room " << roomName << endl;
             close(clientFd);
-            currentRoom.client.erase(std::remove(currentRoom.client.begin(), currentRoom.client.end(), clientFd), currentRoom.client.end());
+            currentRoom.client.erase(remove(currentRoom.client.begin(), currentRoom.client.end(), clientFd), currentRoom.client.end());
             return;
         }
 
         buffer[bytesReceived] = '\0';
-        std::cout << "Client: " << clientName << " in room = " << roomName << " says: " << buffer << std::endl;
+        cout << "Client: " << clientName << " in room = " << roomName << " says: " << buffer << endl;
         
-        std::string message = clientName + ": " + std::string(buffer, bytesReceived); 
+        string message = clientName + ": " + string(buffer, bytesReceived); 
         
         for (int otherClient : currentRoom.client) {
             if (otherClient != clientFd) {
@@ -171,4 +196,3 @@ void handleClient(int clientFd, std::string roomName, std::string password, std:
         }
     }
 }
-
