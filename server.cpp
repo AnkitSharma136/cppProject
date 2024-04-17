@@ -24,47 +24,19 @@ struct room{
 map<string,room> rooms;
 map<string, string> userCredentials;
 
-void fillMap(){
-    string userName,userPassword;
-
-    ifstream input("user.txt");
-
-    while(input>>userName>>userPassword){
-        userCredentials[userName]=userPassword;
-    }
-    input.close();
-
-    for(const auto &it : userCredentials){
-        cout<<it.first<<" "<<it.second<<endl;
-    }
-}
-
-bool authenticateUser(const string& userName, const string& userPassword){
-    if(userCredentials.find(userName)==userCredentials.end()){
-        userCredentials[userName]=userPassword;
-
-        ofstream output("user.txt",ios::app);
-        output<<endl<<userName<<' '<<userPassword;
-        output.close();
-        return true;
-    }
-    auto it = userCredentials.find(userName);
-    if (it->second == userPassword) {
-        return true;  // Authentication successful
-    }
-    return false;     // Authentication failed
-}
-
+void fillMap();
+bool authenticateUser(const string& userName, const string& userPassword);
 void handleClient(int clientFd,string roomName, string password, string clientName);
 
 int main(){
     int serverFd;
     int clientFd;
     
-    userCredentials["User8"]="1234";
+    //Fill Map from text file for user Authentication
     fillMap();
     
-    struct sockaddr_in serverAddress , clientAddress;
+    struct sockaddr_in serverAddress;
+    struct sockaddr_in clientAddress;
     socklen_t clientAddressLength = sizeof(clientAddress);
 
     //Socket Creation
@@ -91,8 +63,9 @@ int main(){
         cerr<<"Failed to listen";
         return EXIT_FAILURE;
     }
-    else
+    else{
         cout<< "Listening on Port : " << PORT <<" Waiting for connections..." <<endl;
+    }
 
     while(true){
         clientFd = accept(serverFd,(struct sockaddr*) &clientAddress, &clientAddressLength);
@@ -106,7 +79,16 @@ int main(){
 
         // Authenticate the client
         char credentials[BUFFER_SIZE];
-        recv(clientFd, credentials, BUFFER_SIZE, 0);
+        int bytes = recv(clientFd, credentials, BUFFER_SIZE, 0);
+
+        if (bytes <= 0) {
+            cerr << "Error: Failed to receive data from client\n";
+            close(clientFd);
+            continue;
+        }
+        credentials[bytes] = '\0';
+
+        cout<<credentials<<endl;
 
         string credentialsStr(credentials);
         size_t delimiterPos = credentialsStr.find(':');
@@ -114,7 +96,9 @@ int main(){
         string UserPassword = credentialsStr.substr(delimiterPos + 1);
 
         if (!authenticateUser(userName, UserPassword)) {
+            cout<<userName<<" "<<UserPassword<<endl;
             cerr << "Authentication failed for " << userName << endl;
+            send(clientFd,"Access Denied",strlen("Access Denied"),0);
             close(clientFd);
             continue;
         }
@@ -134,18 +118,9 @@ int main(){
         dataBuffer[bytesReceived] = '\0';
         
         string data(dataBuffer);
-        size_t position1 = data.find(',');
-        size_t position2 =data.find(',',position1 + 1);
-
-        if (position1 == string::npos || position2 == string::npos) {
-            cerr << "Error: Invalid data format from client\n";
-            close(clientFd);
-            continue;
-        }
-
+        size_t position1 = data.find(':');
         string roomName = data.substr(0, position1);
-        string password = data.substr(position1 + 1, position2 - position1 - 1);
-        string clientName = data.substr(position2 + 1);
+        string password = data.substr(position1 + 1);
 
         if(rooms.find(roomName)==rooms.end()){
             room newRoom;
@@ -153,7 +128,7 @@ int main(){
             rooms[roomName] = newRoom;
         }
 
-        thread clientThread(handleClient, clientFd, roomName, password, clientName);
+        thread clientThread(handleClient, clientFd, roomName, password, userName);
         clientThread.detach();
     }
 
@@ -162,13 +137,49 @@ int main(){
 
 }
 
+void fillMap(){
+    string userName,userPassword;
+
+    ifstream input("user.txt");
+
+    while(input>>userName>>userPassword){
+        userCredentials[userName]=userPassword;
+    }
+    input.close();
+
+    for(const auto &it : userCredentials){
+        cout<<it.first<<" "<<it.second<<endl;
+    }
+}
+
+bool authenticateUser(const string& userName, const string& userPassword){
+    if(userCredentials.find(userName)==userCredentials.end()){
+        userCredentials[userName]=userPassword;
+
+        ofstream output("user.txt",ios::app);
+        output<<userName<<' '<<userPassword<<endl;
+        output.flush();
+        output.close();
+        return true;
+    }
+    auto it = userCredentials.find(userName);
+    if (it->second == userPassword) {
+        return true;
+    }
+    return false;
+}
+
 void handleClient(int clientFd, string roomName, string password, string clientName) {
     room &currentRoom = rooms[roomName];
 
     if (!password.empty() && currentRoom.roomPassword != password) {
         cerr << "Invalid password for room = " << roomName << endl;
+        send(clientFd,"Access Denied",strlen("Access Denied"),0);
         close(clientFd);
         return;
+    }
+    else{
+        send(clientFd,"authenticated",strlen("authenticated"),0);
     }
 
     currentRoom.client.push_back(clientFd);
