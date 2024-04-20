@@ -63,6 +63,14 @@ int main() {
         string message;
         getline(cin, message);
 
+         // Check if the user wants to exit
+        if (message == "#exit") {
+            send(clientFd, message.c_str(), message.length(), 0);
+            cout << "Exiting..." << endl;
+            break;
+        }
+
+
         int bytesSent = send(clientFd, message.c_str(), message.length(), 0);
         if (bytesSent == -1) {
             cerr << "Server Disconnected , Message not Sent";
