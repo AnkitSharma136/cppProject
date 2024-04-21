@@ -206,12 +206,14 @@ void handleClient(int clientFd, string roomName, string password, string clientN
             }
         }
 
-         // Check if the client wants to exit
+        // Check if the client wants to exit
         if (strcmp(buffer, "#exit") == 0) {
             cout << "Client " << clientName << " requested to exit from room " << roomName << endl;
             close(clientFd);
             currentRoom.client.erase(remove(currentRoom.client.begin(), currentRoom.client.end(), clientFd), currentRoom.client.end());
             return;
         }
+         
     }
+
 }
