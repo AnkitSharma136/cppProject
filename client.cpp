@@ -56,7 +56,6 @@ int main() {
 
     // Start receiving messages in a separate thread
     thread receiveThread(receiveMessages, clientFd);
-    cout << "===========Start Typing Your Message===========" << endl;
 
     // Continuously read input from user and send to server
     while (true) {
@@ -169,6 +168,8 @@ int createOrJoinRoom(int clientFd){
     string response(recvBuffer);
     if (response == "Access Denied")
         return EXIT_FAILURE;
+
+    cout << "=========== Joined "<< roomName<<" type your message ===========" << endl;
        
     return EXIT_SUCCESS;
 }
