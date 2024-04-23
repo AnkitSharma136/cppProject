@@ -42,6 +42,7 @@ int main() {
     // Authenticate User 
     if(authenticateUser(clientFd) == EXIT_FAILURE){
         cerr<< "Failed to authenticate user";
+        close(clientFd);
         return EXIT_FAILURE;
     }
 
@@ -50,6 +51,7 @@ int main() {
     // Create Or Join room
     if(createOrJoinRoom(clientFd) == EXIT_FAILURE){
         cerr << "Access Denied by Server , Wrong Password for existing room\n";
+        close(clientFd);
         cout<<endl;
         return EXIT_FAILURE;
     }
@@ -101,7 +103,7 @@ void receiveMessages(int clientFd) {
 
 // Function to authenticate the user with the server
 int authenticateUser(int clientFd){
-    char buffer[BUFFER_SIZE];
+    //char buffer[BUFFER_SIZE];
 
     // Get username and password from user
     string username, password;

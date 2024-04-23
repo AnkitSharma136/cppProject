@@ -158,7 +158,7 @@ bool authenticateUser(const string& userName, const string& userPassword){
 
         ofstream output("user.txt",ios::app);
         output<<userName<<' '<<userPassword<<endl;
-        output.flush();
+        //output.flush();
         output.close();
         return true;
     }
@@ -212,8 +212,6 @@ void handleClient(int clientFd, string roomName, string password, string clientN
             close(clientFd);
             currentRoom.client.erase(remove(currentRoom.client.begin(), currentRoom.client.end(), clientFd), currentRoom.client.end());
             return;
-        }
-         
+        }         
     }
-
 }
